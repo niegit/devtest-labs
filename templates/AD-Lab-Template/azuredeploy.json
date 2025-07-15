@@ -67,7 +67,7 @@
     "clientPublicIPName": "[concat(parameters('clientVmName'), '-pip')]",
     "serverPrivateIP": "10.0.0.4",
     "clientPrivateIP": "10.0.0.5",
-    "artifactsLocation": "https://raw.githubusercontent.com/dlepi24/devtest-labs/main/templates/AD-Lab-Template/",
+    "artifactsLocation": "https://raw.githubusercontent.com/dlepi24/devtest-labs/main/templates/",
     "artifactsLocationSasToken": ""
   },
   "resources": [
