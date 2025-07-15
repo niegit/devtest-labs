@@ -61,7 +61,6 @@
   "variables": {
     "vnetName": "AD-Lab-VNet",
     "subnetName": "default",
-    "nsgName": "AD-Lab-NSG",
     "serverNicName": "[concat(parameters('serverVmName'), '-nic')]",
     "clientNicName": "[concat(parameters('clientVmName'), '-nic')]",
     "serverPublicIPName": "[concat(parameters('serverVmName'), '-pip')]",
@@ -74,29 +73,6 @@
     "artifactsLocationSasToken": ""
   },
   "resources": [
-    {
-      "type": "Microsoft.Network/networkSecurityGroups",
-      "apiVersion": "2021-02-01",
-      "name": "[variables('nsgName')]",
-      "location": "[parameters('location')]",
-      "properties": {
-        "securityRules": [
-          {
-            "name": "RDP",
-            "properties": {
-              "priority": 1000,
-              "protocol": "Tcp",
-              "access": "Allow",
-              "direction": "Inbound",
-              "sourceAddressPrefix": "*",
-              "sourcePortRange": "*",
-              "destinationAddressPrefix": "*",
-              "destinationPortRange": "3389"
-            }
-          }
-        ]
-      }
-    },
     {
       "type": "Microsoft.Network/publicIPAddresses",
       "apiVersion": "2021-02-01",
@@ -126,9 +102,6 @@
       "apiVersion": "2021-02-01",
       "name": "[variables('vnetName')]",
       "location": "[parameters('location')]",
-      "dependsOn": [
-        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
-      ],
       "properties": {
         "addressSpace": {
           "addressPrefixes": [
@@ -139,10 +112,7 @@
           {
             "name": "[variables('subnetName')]",
             "properties": {
-              "addressPrefix": "10.0.0.0/24",
-              "networkSecurityGroup": {
-                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
-              }
+              "addressPrefix": "10.0.0.0/24"
             }
           }
         ]
@@ -190,7 +160,11 @@
         "osProfile": {
           "computerName": "[parameters('serverVmName')]",
           "adminUsername": "[parameters('adminUsername')]",
-          "adminPassword": "[parameters('adminPassword')]"
+          "adminPassword": "[parameters('adminPassword')]",
+          "windowsConfiguration": {
+            "enableAutomaticUpdates": false,
+            "provisionVMAgent": true
+          }
         },
         "storageProfile": {
           "imageReference": {
@@ -250,8 +224,7 @@
       "name": "[concat(variables('vnetName'), '-updated')]",
       "location": "[parameters('location')]",
       "dependsOn": [
-        "[resourceId('Microsoft.Compute/virtualMachines/extensions', parameters('serverVmName'), 'CreateADForest')]",
-        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+        "[resourceId('Microsoft.Compute/virtualMachines/extensions', parameters('serverVmName'), 'CreateADForest')]"
       ],
       "properties": {
         "addressSpace": {
@@ -268,10 +241,7 @@
           {
             "name": "[variables('subnetName')]",
             "properties": {
-              "addressPrefix": "10.0.0.0/24",
-              "networkSecurityGroup": {
-                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
-              }
+              "addressPrefix": "10.0.0.0/24"
             }
           }
         ]
@@ -324,7 +294,11 @@
         "osProfile": {
           "computerName": "[parameters('clientVmName')]",
           "adminUsername": "[parameters('adminUsername')]",
-          "adminPassword": "[parameters('adminPassword')]"
+          "adminPassword": "[parameters('adminPassword')]",
+          "windowsConfiguration": {
+            "enableAutomaticUpdates": false,
+            "provisionVMAgent": true
+          }
         },
         "storageProfile": {
           "imageReference": {
@@ -401,9 +375,9 @@
       "type": "string",
       "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('clientPublicIPName'))).dnsSettings.fqdn]"
     },
-    "location": {
+    "rdpInstructions": {
       "type": "string",
-      "value": "[parameters('location')]"
+      "value": "RDP is enabled by default on Windows VMs. Connect using the public IP addresses or FQDNs provided above."
     }
   }
 }
