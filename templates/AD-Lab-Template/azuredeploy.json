@@ -59,7 +59,7 @@
     }
   },
   "variables": {
-    "vnetName": "AD-Lab-VNet",
+    "vnetName": "[concat('AD-Lab-VNet-', uniqueString(resourceGroup().id))]",
     "subnetName": "default",
     "serverNicName": "[concat(parameters('serverVmName'), '-nic')]",
     "clientNicName": "[concat(parameters('clientVmName'), '-nic')]",
@@ -67,8 +67,6 @@
     "clientPublicIPName": "[concat(parameters('clientVmName'), '-pip')]",
     "serverPrivateIP": "10.0.0.4",
     "clientPrivateIP": "10.0.0.5",
-    "dscModuleUrl": "https://github.com/PowerShell/xActiveDirectory/archive/dev.zip",
-    "dscFunction": "CreateADPDC.ps1\\CreateADPDC",
     "artifactsLocation": "https://raw.githubusercontent.com/dlepi24/devtest-labs/main/templates/AD-Lab-Template/",
     "artifactsLocationSasToken": ""
   },
@@ -78,6 +76,9 @@
       "apiVersion": "2021-02-01",
       "name": "[variables('serverPublicIPName')]",
       "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard"
+      },
       "properties": {
         "publicIPAllocationMethod": "Static",
         "dnsSettings": {
@@ -90,6 +91,9 @@
       "apiVersion": "2021-02-01",
       "name": "[variables('clientPublicIPName')]",
       "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard"
+      },
       "properties": {
         "publicIPAllocationMethod": "Static",
         "dnsSettings": {
@@ -163,7 +167,8 @@
           "adminPassword": "[parameters('adminPassword')]",
           "windowsConfiguration": {
             "enableAutomaticUpdates": false,
-            "provisionVMAgent": true
+            "provisionVMAgent": true,
+            "timeZone": "Central Standard Time"
           }
         },
         "storageProfile": {
@@ -174,6 +179,7 @@
             "version": "latest"
           },
           "osDisk": {
+            "name": "[concat(parameters('serverVmName'), '-osdisk')]",
             "createOption": "FromImage",
             "managedDisk": {
               "storageAccountType": "Premium_LRS"
@@ -198,23 +204,15 @@
         "[resourceId('Microsoft.Compute/virtualMachines', parameters('serverVmName'))]"
       ],
       "properties": {
-        "publisher": "Microsoft.Powershell",
-        "type": "DSC",
-        "typeHandlerVersion": "2.77",
+        "publisher": "Microsoft.Compute",
+        "type": "CustomScriptExtension",
+        "typeHandlerVersion": "1.10",
         "autoUpgradeMinorVersion": true,
         "settings": {
-          "modulesUrl": "[variables('dscModuleUrl')]",
-          "configurationFunction": "[variables('dscFunction')]",
-          "properties": {
-            "DomainName": "[parameters('domainName')]",
-            "AdminCreds": {
-              "UserName": "[parameters('adminUsername')]",
-              "Password": "PrivateSettingsRef:AdminPassword"
-            }
-          }
-        },
-        "protectedSettings": {
-          "AdminPassword": "[parameters('adminPassword')]"
+          "fileUris": [
+            "[uri(variables('artifactsLocation'), concat('scripts/CreateADPDC.ps1', variables('artifactsLocationSasToken')))]"
+          ],
+          "commandToExecute": "[concat('powershell -ExecutionPolicy Unrestricted -File CreateADPDC.ps1 -DomainName ', parameters('domainName'), ' -AdminUsername ', parameters('adminUsername'), ' -AdminPassword ', parameters('adminPassword'))]"
         }
       }
     },
@@ -297,17 +295,19 @@
           "adminPassword": "[parameters('adminPassword')]",
           "windowsConfiguration": {
             "enableAutomaticUpdates": false,
-            "provisionVMAgent": true
+            "provisionVMAgent": true,
+            "timeZone": "Central Standard Time"
           }
         },
         "storageProfile": {
           "imageReference": {
-            "publisher": "microsoftwindowsdesktop",
-            "offer": "windows-11",
-            "sku": "win11-22h2-pro",
+            "publisher": "MicrosoftWindowsDesktop",
+            "offer": "Windows-11",
+            "sku": "win11-24h2-pro",
             "version": "latest"
           },
           "osDisk": {
+            "name": "[concat(parameters('clientVmName'), '-osdisk')]",
             "createOption": "FromImage",
             "managedDisk": {
               "storageAccountType": "Premium_LRS"
