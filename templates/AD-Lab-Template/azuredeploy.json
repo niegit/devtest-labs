@@ -219,7 +219,7 @@
     {
       "type": "Microsoft.Network/virtualNetworks",
       "apiVersion": "2021-02-01",
-      "name": "[concat(variables('vnetName'), '-DNSUpdate')]",
+      "name": "[variables('vnetName')]",
       "location": "[parameters('location')]",
       "dependsOn": [
         "[resourceId('Microsoft.Compute/virtualMachines/extensions', parameters('serverVmName'), 'CreateADForest')]"
@@ -252,7 +252,7 @@
       "name": "[variables('clientNicName')]",
       "location": "[parameters('location')]",
       "dependsOn": [
-        "[resourceId('Microsoft.Network/virtualNetworks', concat(variables('vnetName'), '-DNSUpdate'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]",
         "[resourceId('Microsoft.Network/publicIPAddresses', variables('clientPublicIPName'))]"
       ],
       "properties": {
@@ -263,7 +263,7 @@
               "privateIPAllocationMethod": "Static",
               "privateIPAddress": "[variables('clientPrivateIP')]",
               "subnet": {
-                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', concat(variables('vnetName'), '-DNSUpdate'), variables('subnetName'))]"
+                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('subnetName'))]"
               },
               "publicIPAddress": {
                 "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('clientPublicIPName'))]"
