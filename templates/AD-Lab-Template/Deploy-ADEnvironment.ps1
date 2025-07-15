@@ -17,9 +17,9 @@ param(
     [string]$AdminUsername = "labadmin",
     [string]$ServerVmName = "DC01",
     [string]$ClientVmName = "CLIENT01",
-    [string]$VmSize = "Standard_D2s_v3",
-    [string]$TemplateUri = "https://raw.githubusercontent.com/your-repo/ad-lab-template/main/azuredeploy.json",
-    [string]$Location = "East US"
+    [string]$VmSize = "Standard_B2ms",
+    [string]$TemplateUri = "https://raw.githubusercontent.com/dlepi24/devtest-labs/main/templates/AD-Lab-Template/azuredeploy.json",
+    [string]$Location = "North Central US"
 )
 
 # Import required modules
