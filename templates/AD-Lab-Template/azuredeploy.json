@@ -2,13 +2,6 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    "labName": {
-      "type": "string",
-      "defaultValue": "domain-controller-and-win11",
-      "metadata": {
-        "description": "Name of the existing DevTest Lab where the environment will be deployed. Make sure this lab already exists in your resource group."
-      }
-    },
     "domainName": {
       "type": "string",
       "defaultValue": "contoso.local",
@@ -66,10 +59,13 @@
     }
   },
   "variables": {
-    "vnetName": "[concat(parameters('labName'), '-vnet')]",
+    "vnetName": "AD-Lab-VNet",
     "subnetName": "default",
+    "nsgName": "AD-Lab-NSG",
     "serverNicName": "[concat(parameters('serverVmName'), '-nic')]",
     "clientNicName": "[concat(parameters('clientVmName'), '-nic')]",
+    "serverPublicIPName": "[concat(parameters('serverVmName'), '-pip')]",
+    "clientPublicIPName": "[concat(parameters('clientVmName'), '-pip')]",
     "serverPrivateIP": "10.0.0.4",
     "clientPrivateIP": "10.0.0.5",
     "dscModuleUrl": "https://github.com/PowerShell/xActiveDirectory/archive/dev.zip",
@@ -79,10 +75,60 @@
   },
   "resources": [
     {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2021-02-01",
+      "name": "[variables('nsgName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "RDP",
+            "properties": {
+              "priority": 1000,
+              "protocol": "Tcp",
+              "access": "Allow",
+              "direction": "Inbound",
+              "sourceAddressPrefix": "*",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "3389"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/publicIPAddresses",
+      "apiVersion": "2021-02-01",
+      "name": "[variables('serverPublicIPName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "publicIPAllocationMethod": "Static",
+        "dnsSettings": {
+          "domainNameLabel": "[toLower(concat(parameters('serverVmName'), '-', uniqueString(resourceGroup().id)))]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/publicIPAddresses",
+      "apiVersion": "2021-02-01",
+      "name": "[variables('clientPublicIPName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "publicIPAllocationMethod": "Static",
+        "dnsSettings": {
+          "domainNameLabel": "[toLower(concat(parameters('clientVmName'), '-', uniqueString(resourceGroup().id)))]"
+        }
+      }
+    },
+    {
       "type": "Microsoft.Network/virtualNetworks",
       "apiVersion": "2021-02-01",
       "name": "[variables('vnetName')]",
       "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+      ],
       "properties": {
         "addressSpace": {
           "addressPrefixes": [
@@ -93,7 +139,10 @@
           {
             "name": "[variables('subnetName')]",
             "properties": {
-              "addressPrefix": "10.0.0.0/24"
+              "addressPrefix": "10.0.0.0/24",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+              }
             }
           }
         ]
@@ -105,7 +154,8 @@
       "name": "[variables('serverNicName')]",
       "location": "[parameters('location')]",
       "dependsOn": [
-        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]",
+        "[resourceId('Microsoft.Network/publicIPAddresses', variables('serverPublicIPName'))]"
       ],
       "properties": {
         "ipConfigurations": [
@@ -116,6 +166,9 @@
               "privateIPAddress": "[variables('serverPrivateIP')]",
               "subnet": {
                 "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('subnetName'))]"
+              },
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('serverPublicIPName'))]"
               }
             }
           }
@@ -123,38 +176,43 @@
       }
     },
     {
-      "type": "Microsoft.DevTestLab/labs/virtualmachines",
-      "apiVersion": "2018-09-15",
-      "name": "[concat(parameters('labName'), '/', parameters('serverVmName'))]",
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2021-03-01",
+      "name": "[parameters('serverVmName')]",
       "location": "[parameters('location')]",
       "dependsOn": [
         "[resourceId('Microsoft.Network/networkInterfaces', variables('serverNicName'))]"
       ],
       "properties": {
-        "size": "[parameters('vmSize')]",
-        "userName": "[parameters('adminUsername')]",
-        "password": "[parameters('adminPassword')]",
-        "isAuthenticationWithSshKey": false,
-        "galleryImageReference": {
-          "offer": "WindowsServer",
-          "publisher": "MicrosoftWindowsServer",
-          "sku": "2022-datacenter-g2",
-          "osType": "Windows",
-          "version": "latest"
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmSize')]"
         },
-        "networkInterface": {
-          "sharedPublicIpAddressConfiguration": {
-            "inboundNatRules": [
-              {
-                "transportProtocol": "tcp",
-                "backendPort": 3389
-              }
-            ]
+        "osProfile": {
+          "computerName": "[parameters('serverVmName')]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[parameters('adminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "MicrosoftWindowsServer",
+            "offer": "WindowsServer",
+            "sku": "2022-datacenter-g2",
+            "version": "latest"
+          },
+          "osDisk": {
+            "createOption": "FromImage",
+            "managedDisk": {
+              "storageAccountType": "Premium_LRS"
+            }
           }
         },
-        "allowClaim": true,
-        "storageType": "Premium",
-        "notes": "Domain Controller Server - Windows Server 2022"
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('serverNicName'))]"
+            }
+          ]
+        }
       }
     },
     {
@@ -163,7 +221,7 @@
       "name": "[concat(parameters('serverVmName'), '/CreateADForest')]",
       "location": "[parameters('location')]",
       "dependsOn": [
-        "[resourceId('Microsoft.DevTestLab/labs/virtualmachines', parameters('labName'), parameters('serverVmName'))]"
+        "[resourceId('Microsoft.Compute/virtualMachines', parameters('serverVmName'))]"
       ],
       "properties": {
         "publisher": "Microsoft.Powershell",
@@ -192,7 +250,8 @@
       "name": "[concat(variables('vnetName'), '-updated')]",
       "location": "[parameters('location')]",
       "dependsOn": [
-        "[resourceId('Microsoft.Compute/virtualMachines/extensions', parameters('serverVmName'), 'CreateADForest')]"
+        "[resourceId('Microsoft.Compute/virtualMachines/extensions', parameters('serverVmName'), 'CreateADForest')]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
       ],
       "properties": {
         "addressSpace": {
@@ -209,7 +268,10 @@
           {
             "name": "[variables('subnetName')]",
             "properties": {
-              "addressPrefix": "10.0.0.0/24"
+              "addressPrefix": "10.0.0.0/24",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+              }
             }
           }
         ]
@@ -221,7 +283,8 @@
       "name": "[variables('clientNicName')]",
       "location": "[parameters('location')]",
       "dependsOn": [
-        "[resourceId('Microsoft.Network/virtualNetworks', concat(variables('vnetName'), '-updated'))]"
+        "[resourceId('Microsoft.Network/virtualNetworks', concat(variables('vnetName'), '-updated'))]",
+        "[resourceId('Microsoft.Network/publicIPAddresses', variables('clientPublicIPName'))]"
       ],
       "properties": {
         "ipConfigurations": [
@@ -232,6 +295,9 @@
               "privateIPAddress": "[variables('clientPrivateIP')]",
               "subnet": {
                 "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', concat(variables('vnetName'), '-updated'), variables('subnetName'))]"
+              },
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('clientPublicIPName'))]"
               }
             }
           }
@@ -244,38 +310,43 @@
       }
     },
     {
-      "type": "Microsoft.DevTestLab/labs/virtualmachines",
-      "apiVersion": "2018-09-15",
-      "name": "[concat(parameters('labName'), '/', parameters('clientVmName'))]",
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2021-03-01",
+      "name": "[parameters('clientVmName')]",
       "location": "[parameters('location')]",
       "dependsOn": [
         "[resourceId('Microsoft.Network/networkInterfaces', variables('clientNicName'))]"
       ],
       "properties": {
-        "size": "[parameters('vmSize')]",
-        "userName": "[parameters('adminUsername')]",
-        "password": "[parameters('adminPassword')]",
-        "isAuthenticationWithSshKey": false,
-        "galleryImageReference": {
-          "offer": "windows-11",
-          "publisher": "microsoftwindowsdesktop",
-          "sku": "win11-22h2-pro",
-          "osType": "Windows",
-          "version": "latest"
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmSize')]"
         },
-        "networkInterface": {
-          "sharedPublicIpAddressConfiguration": {
-            "inboundNatRules": [
-              {
-                "transportProtocol": "tcp",
-                "backendPort": 3389
-              }
-            ]
+        "osProfile": {
+          "computerName": "[parameters('clientVmName')]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[parameters('adminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "microsoftwindowsdesktop",
+            "offer": "windows-11",
+            "sku": "win11-22h2-pro",
+            "version": "latest"
+          },
+          "osDisk": {
+            "createOption": "FromImage",
+            "managedDisk": {
+              "storageAccountType": "Premium_LRS"
+            }
           }
         },
-        "allowClaim": true,
-        "storageType": "Premium",
-        "notes": "Windows 11 Client - Domain Joined"
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('clientNicName'))]"
+            }
+          ]
+        }
       }
     },
     {
@@ -284,7 +355,8 @@
       "name": "[concat(parameters('clientVmName'), '/JoinDomain')]",
       "location": "[parameters('location')]",
       "dependsOn": [
-        "[resourceId('Microsoft.DevTestLab/labs/virtualmachines', parameters('labName'), parameters('clientVmName'))]"
+        "[resourceId('Microsoft.Compute/virtualMachines', parameters('clientVmName'))]",
+        "[resourceId('Microsoft.Compute/virtualMachines/extensions', parameters('serverVmName'), 'CreateADForest')]"
       ],
       "properties": {
         "publisher": "Microsoft.Compute",
@@ -312,6 +384,22 @@
     "clientVmName": {
       "type": "string",
       "value": "[parameters('clientVmName')]"
+    },
+    "serverPublicIP": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('serverPublicIPName'))).ipAddress]"
+    },
+    "clientPublicIP": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('clientPublicIPName'))).ipAddress]"
+    },
+    "serverFQDN": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('serverPublicIPName'))).dnsSettings.fqdn]"
+    },
+    "clientFQDN": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('clientPublicIPName'))).dnsSettings.fqdn]"
     },
     "location": {
       "type": "string",
