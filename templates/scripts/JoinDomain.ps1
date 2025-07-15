@@ -39,6 +39,7 @@ try {
     Write-Output "Testing DNS resolution..."
     $retryCount = 0
     $maxRetries = 30
+    $lastDnsError = ""
     
     do {
         try {
@@ -47,14 +48,15 @@ try {
             break
         }
         catch {
-            Write-Output "DNS resolution failed, retry $retryCount of $maxRetries - Error: $($_.Exception.Message)"
+            $lastDnsError = $_.Exception.Message
+            Write-Output "DNS resolution failed, retry $retryCount of $maxRetries - Error: $lastDnsError"
             Start-Sleep -Seconds 10
             $retryCount++
         }
     } while ($retryCount -lt $maxRetries)
 
     if ($retryCount -eq $maxRetries) {
-        throw "DNS resolution failed after $maxRetries attempts"
+        throw "DNS resolution failed after $maxRetries attempts. Last error: $lastDnsError"
     }
 
     # Test domain controller connectivity
@@ -89,6 +91,7 @@ try {
     $joinRetryCount = 0
     $maxJoinRetries = 3
     $joinSuccessful = $false
+    $lastJoinError = ""
     
     do {
         try {
@@ -99,19 +102,18 @@ try {
         }
         catch {
             $joinRetryCount++
-            Write-Output "Domain join attempt $joinRetryCount failed: $($_.Exception.Message)"
+            $lastJoinError = $_.Exception.Message
+            Write-Output "Domain join attempt $joinRetryCount failed: $lastJoinError"
             
             if ($joinRetryCount -lt $maxJoinRetries) {
                 Write-Output "Retrying domain join in 30 seconds..."
                 Start-Sleep -Seconds 30
-            } else {
-                throw "Domain join failed after $maxJoinRetries attempts: $($_.Exception.Message)"
             }
         }
     } while ($joinRetryCount -lt $maxJoinRetries -and -not $joinSuccessful)
 
     if (-not $joinSuccessful) {
-        throw "Domain join was not successful"
+        throw "Domain join failed after $maxJoinRetries attempts. Last error: $lastJoinError"
     }
 
     # Verify domain join
