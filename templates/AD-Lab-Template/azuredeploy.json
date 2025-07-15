@@ -56,6 +56,13 @@
       "metadata": {
         "description": "Azure region where all resources will be deployed. North Central US is selected for optimal performance and compliance."
       }
+    },
+    "existingNsgName": {
+      "type": "string",
+      "defaultValue": "lab-nsg",
+      "metadata": {
+        "description": "Name of the existing Network Security Group to use for the VNet subnet. This NSG should already exist in the same resource group or subscription."
+      }
     }
   },
   "variables": {
@@ -116,7 +123,10 @@
           {
             "name": "[variables('subnetName')]",
             "properties": {
-              "addressPrefix": "10.0.0.0/24"
+              "addressPrefix": "10.0.0.0/24",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('existingNsgName'))]"
+              }
             }
           }
         ]
@@ -219,7 +229,7 @@
     {
       "type": "Microsoft.Network/virtualNetworks",
       "apiVersion": "2021-02-01",
-      "name": "[concat(variables('vnetName'), '-updated')]",
+      "name": "[concat(variables('vnetName'), '-DNSUpdate')]",
       "location": "[parameters('location')]",
       "dependsOn": [
         "[resourceId('Microsoft.Compute/virtualMachines/extensions', parameters('serverVmName'), 'CreateADForest')]"
@@ -239,7 +249,10 @@
           {
             "name": "[variables('subnetName')]",
             "properties": {
-              "addressPrefix": "10.0.0.0/24"
+              "addressPrefix": "10.0.0.0/24",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('existingNsgName'))]"
+              }
             }
           }
         ]
@@ -251,7 +264,7 @@
       "name": "[variables('clientNicName')]",
       "location": "[parameters('location')]",
       "dependsOn": [
-        "[resourceId('Microsoft.Network/virtualNetworks', concat(variables('vnetName'), '-updated'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', concat(variables('vnetName'), '-DNSUpdate'))]",
         "[resourceId('Microsoft.Network/publicIPAddresses', variables('clientPublicIPName'))]"
       ],
       "properties": {
@@ -262,19 +275,14 @@
               "privateIPAllocationMethod": "Static",
               "privateIPAddress": "[variables('clientPrivateIP')]",
               "subnet": {
-                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', concat(variables('vnetName'), '-updated'), variables('subnetName'))]"
+                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', concat(variables('vnetName'), '-DNSUpdate'), variables('subnetName'))]"
               },
               "publicIPAddress": {
                 "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('clientPublicIPName'))]"
               }
             }
           }
-        ],
-        "dnsSettings": {
-          "dnsServers": [
-            "[variables('serverPrivateIP')]"
-          ]
-        }
+        ]
       }
     },
     {
@@ -377,7 +385,7 @@
     },
     "rdpInstructions": {
       "type": "string",
-      "value": "RDP is enabled by default on Windows VMs. Connect using the public IP addresses or FQDNs provided above."
+      "value": "RDP is enabled by default on Windows VMs. Connect using the public IP addresses or FQDNs provided above. VMs use the specified NSG for security."
     }
   }
 }
