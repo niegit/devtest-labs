@@ -232,7 +232,8 @@
         },
         "dhcpOptions": {
           "dnsServers": [
-            "[variables('serverPrivateIP')]"
+            "[variables('serverPrivateIP')]",
+            "168.63.129.16"
           ]
         },
         "subnets": [
