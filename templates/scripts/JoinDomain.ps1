@@ -20,6 +20,7 @@ Write-Output "Starting domain join process..."
 Write-Output "Domain: $DomainName"
 Write-Output "DC IP: $DCIPAddress"
 Write-Output "Admin User: $AdminUsername"
+Write-Output "Current time: $(Get-Date)"
 
 try {
     # Set DNS server to domain controller
@@ -30,6 +31,10 @@ try {
         Write-Output "Set DNS for adapter: $($adapter.Name)"
     }
 
+    # Clear DNS cache
+    Write-Output "Clearing DNS cache..."
+    Clear-DnsClientCache
+
     # Wait for DNS resolution to work
     Write-Output "Testing DNS resolution..."
     $retryCount = 0
@@ -38,11 +43,11 @@ try {
     do {
         try {
             $result = Resolve-DnsName -Name $DomainName -Type A -ErrorAction Stop
-            Write-Output "DNS resolution successful for $DomainName"
+            Write-Output "DNS resolution successful for $DomainName - IP: $($result.IPAddress)"
             break
         }
         catch {
-            Write-Output "DNS resolution failed, retry $retryCount of $maxRetries"
+            Write-Output "DNS resolution failed, retry $retryCount of $maxRetries - Error: $($_.Exception.Message)"
             Start-Sleep -Seconds 10
             $retryCount++
         }
@@ -52,38 +57,130 @@ try {
         throw "DNS resolution failed after $maxRetries attempts"
     }
 
+    # Test domain controller connectivity
+    Write-Output "Testing domain controller connectivity..."
+    $connectivityTests = @(
+        @{ Port = 389; Service = "LDAP" },
+        @{ Port = 88; Service = "Kerberos" },
+        @{ Port = 53; Service = "DNS" }
+    )
+
+    foreach ($test in $connectivityTests) {
+        try {
+            $connection = Test-NetConnection -ComputerName $DCIPAddress -Port $test.Port -WarningAction SilentlyContinue
+            if ($connection.TcpTestSucceeded) {
+                Write-Output "Successfully connected to $($test.Service) on port $($test.Port)"
+            } else {
+                Write-Output "Warning: Could not connect to $($test.Service) on port $($test.Port)"
+            }
+        }
+        catch {
+            Write-Output "Warning: Failed to test $($test.Service) connectivity: $($_.Exception.Message)"
+        }
+    }
+
     # Create credential object
     $securePassword = ConvertTo-SecureString $AdminPassword -AsPlainText -Force
     $credential = New-Object System.Management.Automation.PSCredential("$DomainName\$AdminUsername", $securePassword)
 
-    # Test domain connectivity
-    Write-Output "Testing domain connectivity..."
-    try {
-        $domainController = Get-ADDomainController -DomainName $DomainName -Credential $credential -ErrorAction Stop
-        Write-Output "Successfully connected to domain controller: $($domainController.Name)"
-    }
-    catch {
-        Write-Output "Direct AD connection failed, proceeding with domain join anyway..."
-    }
-
-    # Join the domain
+    # Join the domain with retry logic
     Write-Output "Joining domain $DomainName..."
     
-    # Use Add-Computer cmdlet
-    Add-Computer -DomainName $DomainName -Credential $credential -Force -Verbose
+    $joinRetryCount = 0
+    $maxJoinRetries = 3
+    $joinSuccessful = $false
     
-    Write-Output "Domain join completed successfully!"
-    
-    # Move computer to Workstations OU (optional)
+    do {
+        try {
+            Add-Computer -DomainName $DomainName -Credential $credential -Force -Verbose -ErrorAction Stop
+            $joinSuccessful = $true
+            Write-Output "Domain join completed successfully!"
+            break
+        }
+        catch {
+            $joinRetryCount++
+            Write-Output "Domain join attempt $joinRetryCount failed: $($_.Exception.Message)"
+            
+            if ($joinRetryCount -lt $maxJoinRetries) {
+                Write-Output "Retrying domain join in 30 seconds..."
+                Start-Sleep -Seconds 30
+            } else {
+                throw "Domain join failed after $maxJoinRetries attempts: $($_.Exception.Message)"
+            }
+        }
+    } while ($joinRetryCount -lt $maxJoinRetries -and -not $joinSuccessful)
+
+    if (-not $joinSuccessful) {
+        throw "Domain join was not successful"
+    }
+
+    # Verify domain join
+    Write-Output "Verifying domain join..."
     try {
-        $computerName = $env:COMPUTERNAME
-        $workstationsOU = "OU=Workstations,DC=$($DomainName.Replace('.', ',DC='))"
+        $computerSystem = Get-WmiObject -Class Win32_ComputerSystem
+        if ($computerSystem.Domain -eq $DomainName) {
+            Write-Output "Domain join verification successful. Computer is now member of: $($computerSystem.Domain)"
+        } else {
+            Write-Output "Warning: Domain join verification shows domain as: $($computerSystem.Domain)"
+        }
+    }
+    catch {
+        Write-Output "Could not verify domain join status: $($_.Exception.Message)"
+    }
+
+    # Install RSAT tools for management (before attempting to move computer)
+    Write-Output "Installing RSAT tools..."
+    try {
+        $rsatFeatures = @(
+            "Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0",
+            "Rsat.Dns.Tools~~~~0.0.1.0",
+            "Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0"
+        )
         
-        # Import AD module if available
+        foreach ($feature in $rsatFeatures) {
+            try {
+                $result = Add-WindowsCapability -Online -Name $feature -ErrorAction Stop
+                if ($result.RestartNeeded) {
+                    Write-Output "RSAT feature $feature installed (restart required)"
+                } else {
+                    Write-Output "RSAT feature $feature installed successfully"
+                }
+            }
+            catch {
+                Write-Output "Failed to install RSAT feature $feature: $($_.Exception.Message)"
+            }
+        }
+    }
+    catch {
+        Write-Output "Failed to install RSAT tools: $($_.Exception.Message)"
+    }
+
+    # Try to move computer to Workstations OU (only if AD module is available)
+    Write-Output "Attempting to move computer to Workstations OU..."
+    try {
+        # First check if ActiveDirectory module is available
         if (Get-Module -ListAvailable -Name ActiveDirectory) {
-            Import-Module ActiveDirectory
-            Move-ADObject -Identity "CN=$computerName,CN=Computers,DC=$($DomainName.Replace('.', ',DC='))" -TargetPath $workstationsOU -Credential $credential
-            Write-Output "Moved computer to Workstations OU"
+            Import-Module ActiveDirectory -ErrorAction Stop
+            
+            $computerName = $env:COMPUTERNAME
+            $domainDN = "DC=" + $DomainName.Replace('.', ',DC=')
+            $workstationsOU = "OU=Workstations,$domainDN"
+            $computerDN = "CN=$computerName,CN=Computers,$domainDN"
+            
+            # Check if Workstations OU exists, create if it doesn't
+            try {
+                Get-ADOrganizationalUnit -Identity $workstationsOU -Credential $credential -ErrorAction Stop | Out-Null
+                Write-Output "Workstations OU exists"
+            }
+            catch {
+                Write-Output "Workstations OU does not exist, creating it..."
+                New-ADOrganizationalUnit -Name "Workstations" -Path $domainDN -Credential $credential -ErrorAction Stop
+                Write-Output "Created Workstations OU"
+            }
+            
+            # Move the computer
+            Move-ADObject -Identity $computerDN -TargetPath $workstationsOU -Credential $credential -ErrorAction Stop
+            Write-Output "Successfully moved computer to Workstations OU"
         }
         else {
             Write-Output "ActiveDirectory module not available, computer remains in default Computers container"
@@ -91,6 +188,7 @@ try {
     }
     catch {
         Write-Output "Failed to move computer to Workstations OU: $($_.Exception.Message)"
+        Write-Output "Computer will remain in default Computers container"
     }
 
     # Create local test accounts
@@ -112,7 +210,7 @@ try {
         Write-Output "Failed to create local test user: $($_.Exception.Message)"
     }
 
-    # Configure Windows Update to use WSUS if available (optional)
+    # Configure Windows Update to use manual updates during lab testing
     Write-Output "Configuring Windows Update settings..."
     try {
         $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate"
@@ -120,52 +218,71 @@ try {
             New-Item -Path $regPath -Force | Out-Null
         }
         
-        # Disable automatic updates during lab testing
-        Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" -Name "NoAutoUpdate" -Value 1 -ErrorAction SilentlyContinue
-        Write-Output "Configured Windows Update settings"
+        $regPathAU = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
+        if (-not (Test-Path $regPathAU)) {
+            New-Item -Path $regPathAU -Force | Out-Null
+        }
+        
+        # Configure for manual updates during lab testing
+        Set-ItemProperty -Path $regPathAU -Name "NoAutoUpdate" -Value 1 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $regPathAU -Name "AUOptions" -Value 2 -Type DWord -ErrorAction SilentlyContinue
+        Write-Output "Configured Windows Update for manual updates"
     }
     catch {
         Write-Output "Failed to configure Windows Update: $($_.Exception.Message)"
     }
 
-    # Install RSAT tools for management
-    Write-Output "Installing RSAT tools..."
-    try {
-        $rsatFeatures = @(
-            "Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0",
-            "Rsat.Dns.Tools~~~~0.0.1.0",
-            "Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0"
-        )
-        
-        foreach ($feature in $rsatFeatures) {
-            Add-WindowsCapability -Online -Name $feature -ErrorAction SilentlyContinue
-            Write-Output "Installed RSAT feature: $feature"
-        }
-    }
-    catch {
-        Write-Output "Failed to install some RSAT tools: $($_.Exception.Message)"
-    }
-
-    # Set time zone (optional)
+    # Set time zone to match domain controller
     Write-Output "Setting time zone..."
     try {
-        Set-TimeZone -Id "Eastern Standard Time" -ErrorAction SilentlyContinue
-        Write-Output "Time zone set successfully"
+        Set-TimeZone -Id "Central Standard Time" -ErrorAction Stop
+        Write-Output "Time zone set to Central Standard Time"
     }
     catch {
         Write-Output "Failed to set time zone: $($_.Exception.Message)"
     }
 
-    Write-Output "Domain join process completed successfully!"
-    Write-Output "The computer will restart automatically to complete the domain join."
+    # Enable RDP (should already be enabled, but ensure it's configured)
+    Write-Output "Ensuring RDP is enabled..."
+    try {
+        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Write-Output "RDP enabled and firewall configured"
+    }
+    catch {
+        Write-Output "Failed to configure RDP: $($_.Exception.Message)"
+    }
 
-    # Schedule restart
+    Write-Output "Domain join process completed successfully!"
+    Write-Output "Summary:"
+    Write-Output "  - Domain: $DomainName"
+    Write-Output "  - Computer: $env:COMPUTERNAME"
+    Write-Output "  - Admin User: $AdminUsername"
+    Write-Output "  - Completion Time: $(Get-Date)"
+    Write-Output ""
+    Write-Output "The computer will restart in 60 seconds to complete the domain join."
+    Write-Output "After restart, you can log in with domain credentials: $DomainName\$AdminUsername"
+
+    # Schedule restart with more time for cleanup
     shutdown /r /t 60 /c "Restarting to complete domain join" /f
 
 }
 catch {
     Write-Error "Domain join failed: $($_.Exception.Message)"
+    Write-Error "Full error details:"
     Write-Error $_.Exception.StackTrace
+    
+    # Additional diagnostic information
+    Write-Output ""
+    Write-Output "=== DIAGNOSTIC INFORMATION ==="
+    Write-Output "Computer Name: $env:COMPUTERNAME"
+    Write-Output "Current Domain: $((Get-WmiObject -Class Win32_ComputerSystem).Domain)"
+    Write-Output "DNS Settings:"
+    Get-DnsClientServerAddress | ForEach-Object { Write-Output "  Interface: $($_.InterfaceAlias) - DNS: $($_.ServerAddresses -join ', ')" }
+    Write-Output "Network Adapters:"
+    Get-NetAdapter | Where-Object Status -eq "Up" | ForEach-Object { Write-Output "  $($_.Name): $($_.Status)" }
+    Write-Output "================================"
+    
     exit 1
 }
 finally {
