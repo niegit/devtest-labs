@@ -4,54 +4,64 @@
   "parameters": {
     "labName": {
       "type": "string",
+      "defaultValue": "domain-controller-and-win11",
       "metadata": {
-        "description": "Name of the DevTest Lab"
+        "description": "Name of the existing DevTest Lab where the environment will be deployed. Make sure this lab already exists in your resource group."
       }
     },
     "domainName": {
       "type": "string",
       "defaultValue": "contoso.local",
       "metadata": {
-        "description": "The FQDN of the Active Directory Domain to be created"
+        "description": "The fully qualified domain name (FQDN) for the new Active Directory forest. Example: testlab.local or company.internal"
       }
     },
     "adminUsername": {
       "type": "string",
       "defaultValue": "labadmin",
       "metadata": {
-        "description": "Username for the Administrator account"
+        "description": "Administrator username for both VMs and the domain. This account will have Domain Admin privileges. Avoid using 'admin' or 'administrator'."
       }
     },
     "adminPassword": {
       "type": "securestring",
       "metadata": {
-        "description": "Password for the Administrator account"
+        "description": "Password for the administrator account. Must meet Azure complexity requirements: 12+ characters with uppercase, lowercase, numbers, and special characters."
       }
     },
     "serverVmName": {
       "type": "string",
       "defaultValue": "DC01",
       "metadata": {
-        "description": "Name of the Domain Controller VM"
+        "description": "Name for the Domain Controller virtual machine. This will be the primary DC for your new domain. Keep it short and descriptive."
       }
     },
     "clientVmName": {
       "type": "string",
-      "defaultValue": "CLIENT01",
+      "defaultValue": "PC01",
       "metadata": {
-        "description": "Name of the Windows 11 client VM"
+        "description": "Name for the Windows 11 client virtual machine. This VM will automatically join the domain after deployment completes."
       }
     },
     "vmSize": {
       "type": "string",
-      "defaultValue": "Standard_D2s_v3",
+      "defaultValue": "Standard_B2ms",
       "allowedValues": [
-        "Standard_D2s_v3",
-        "Standard_D4s_v3",
-        "Standard_D8s_v3"
+        "Standard_B2ms",
+        "Standard_B2als_v2"
       ],
       "metadata": {
-        "description": "Size of the Virtual Machines"
+        "description": "Size of both virtual machines. B2ms (2 vCPU, 8GB RAM) is recommended for basic testing. B2als (2 vCPU, 4GB RAM) is more cost-effective for light workloads."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "North Central US",
+      "allowedValues": [
+        "North Central US"
+      ],
+      "metadata": {
+        "description": "Azure region where all resources will be deployed. North Central US is selected for optimal performance and compliance."
       }
     }
   },
@@ -64,7 +74,7 @@
     "clientPrivateIP": "10.0.0.5",
     "dscModuleUrl": "https://github.com/PowerShell/xActiveDirectory/archive/dev.zip",
     "dscFunction": "CreateADPDC.ps1\\CreateADPDC",
-    "artifactsLocation": "[deployment().properties.templateLink.uri]",
+    "artifactsLocation": "https://raw.githubusercontent.com/dlepi24/devtest-labs/main/templates/AD-Lab-Template/",
     "artifactsLocationSasToken": ""
   },
   "resources": [
@@ -72,7 +82,7 @@
       "type": "Microsoft.Network/virtualNetworks",
       "apiVersion": "2021-02-01",
       "name": "[variables('vnetName')]",
-      "location": "[resourceGroup().location]",
+      "location": "[parameters('location')]",
       "properties": {
         "addressSpace": {
           "addressPrefixes": [
@@ -93,7 +103,7 @@
       "type": "Microsoft.Network/networkInterfaces",
       "apiVersion": "2021-02-01",
       "name": "[variables('serverNicName')]",
-      "location": "[resourceGroup().location]",
+      "location": "[parameters('location')]",
       "dependsOn": [
         "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
       ],
@@ -116,7 +126,7 @@
       "type": "Microsoft.DevTestLab/labs/virtualmachines",
       "apiVersion": "2018-09-15",
       "name": "[concat(parameters('labName'), '/', parameters('serverVmName'))]",
-      "location": "[resourceGroup().location]",
+      "location": "[parameters('location')]",
       "dependsOn": [
         "[resourceId('Microsoft.Network/networkInterfaces', variables('serverNicName'))]"
       ],
@@ -151,7 +161,7 @@
       "type": "Microsoft.Compute/virtualMachines/extensions",
       "apiVersion": "2021-03-01",
       "name": "[concat(parameters('serverVmName'), '/CreateADForest')]",
-      "location": "[resourceGroup().location]",
+      "location": "[parameters('location')]",
       "dependsOn": [
         "[resourceId('Microsoft.DevTestLab/labs/virtualmachines', parameters('labName'), parameters('serverVmName'))]"
       ],
@@ -180,7 +190,7 @@
       "type": "Microsoft.Network/virtualNetworks",
       "apiVersion": "2021-02-01",
       "name": "[concat(variables('vnetName'), '-updated')]",
-      "location": "[resourceGroup().location]",
+      "location": "[parameters('location')]",
       "dependsOn": [
         "[resourceId('Microsoft.Compute/virtualMachines/extensions', parameters('serverVmName'), 'CreateADForest')]"
       ],
@@ -209,7 +219,7 @@
       "type": "Microsoft.Network/networkInterfaces",
       "apiVersion": "2021-02-01",
       "name": "[variables('clientNicName')]",
-      "location": "[resourceGroup().location]",
+      "location": "[parameters('location')]",
       "dependsOn": [
         "[resourceId('Microsoft.Network/virtualNetworks', concat(variables('vnetName'), '-updated'))]"
       ],
@@ -237,7 +247,7 @@
       "type": "Microsoft.DevTestLab/labs/virtualmachines",
       "apiVersion": "2018-09-15",
       "name": "[concat(parameters('labName'), '/', parameters('clientVmName'))]",
-      "location": "[resourceGroup().location]",
+      "location": "[parameters('location')]",
       "dependsOn": [
         "[resourceId('Microsoft.Network/networkInterfaces', variables('clientNicName'))]"
       ],
@@ -272,7 +282,7 @@
       "type": "Microsoft.Compute/virtualMachines/extensions",
       "apiVersion": "2021-03-01",
       "name": "[concat(parameters('clientVmName'), '/JoinDomain')]",
-      "location": "[resourceGroup().location]",
+      "location": "[parameters('location')]",
       "dependsOn": [
         "[resourceId('Microsoft.DevTestLab/labs/virtualmachines', parameters('labName'), parameters('clientVmName'))]"
       ],
@@ -302,6 +312,10 @@
     "clientVmName": {
       "type": "string",
       "value": "[parameters('clientVmName')]"
+    },
+    "location": {
+      "type": "string",
+      "value": "[parameters('location')]"
     }
   }
 }

@@ -3,7 +3,7 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "labName": {
-      "value": "MSP-Lab-001"
+      "value": "domain-controller-and-win11"
     },
     "domainName": {
       "value": "testlab.local"
@@ -21,7 +21,10 @@
       "value": "CLIENT01"
     },
     "vmSize": {
-      "value": "Standard_D2s_v3"
+      "value": "Standard_B2ms"
+    },
+    "location": {
+      "value": "North Central US"
     }
   }
 }
