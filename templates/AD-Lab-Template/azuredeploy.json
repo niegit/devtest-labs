@@ -217,33 +217,48 @@
       }
     },
     {
-      "type": "Microsoft.Network/virtualNetworks",
-      "apiVersion": "2021-02-01",
-      "name": "[variables('vnetName')]",
-      "location": "[parameters('location')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2021-04-01",
+      "name": "UpdateVNetDNS",
       "dependsOn": [
-        "[resourceId('Microsoft.Compute/virtualMachines/extensions', parameters('serverVmName'), 'CreateADForest')]"
+        "[resourceId('Microsoft.Compute/virtualMachines/extensions', parameters('serverVmName'), 'CreateADForest')]",
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
       ],
       "properties": {
-        "addressSpace": {
-          "addressPrefixes": [
-            "10.0.0.0/16"
-          ]
-        },
-        "dhcpOptions": {
-          "dnsServers": [
-            "[variables('serverPrivateIP')]",
-            "168.63.129.16"
-          ]
-        },
-        "subnets": [
-          {
-            "name": "[variables('subnetName')]",
-            "properties": {
-              "addressPrefix": "10.0.0.0/24"
+        "mode": "Incremental",
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "resources": [
+            {
+              "type": "Microsoft.Network/virtualNetworks",
+              "apiVersion": "2021-02-01",
+              "name": "[variables('vnetName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "addressSpace": {
+                  "addressPrefixes": [
+                    "10.0.0.0/16"
+                  ]
+                },
+                "dhcpOptions": {
+                  "dnsServers": [
+                    "[variables('serverPrivateIP')]",
+                    "168.63.129.16"
+                  ]
+                },
+                "subnets": [
+                  {
+                    "name": "[variables('subnetName')]",
+                    "properties": {
+                      "addressPrefix": "10.0.0.0/24"
+                    }
+                  }
+                ]
+              }
             }
-          }
-        ]
+          ]
+        }
       }
     },
     {
@@ -252,7 +267,7 @@
       "name": "[variables('clientNicName')]",
       "location": "[parameters('location')]",
       "dependsOn": [
-        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]",
+        "[resourceId('Microsoft.Resources/deployments', 'UpdateVNetDNS')]",
         "[resourceId('Microsoft.Network/publicIPAddresses', variables('clientPublicIPName'))]"
       ],
       "properties": {
@@ -326,7 +341,7 @@
       "location": "[parameters('location')]",
       "dependsOn": [
         "[resourceId('Microsoft.Compute/virtualMachines', parameters('clientVmName'))]",
-        "[resourceId('Microsoft.Compute/virtualMachines/extensions', parameters('serverVmName'), 'CreateADForest')]"
+        "[resourceId('Microsoft.Resources/deployments', 'UpdateVNetDNS')]"
       ],
       "properties": {
         "publisher": "Microsoft.Compute",
