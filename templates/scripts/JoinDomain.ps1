@@ -149,7 +149,7 @@ try {
                 }
             }
             catch {
-                Write-Output "Failed to install RSAT feature $feature: $($_.Exception.Message)"
+                Write-Output "Failed to install RSAT feature ${feature}: $($_.Exception.Message)"
             }
         }
     }
