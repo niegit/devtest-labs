@@ -1,0 +1,307 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "labName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the DevTest Lab"
+      }
+    },
+    "domainName": {
+      "type": "string",
+      "defaultValue": "contoso.local",
+      "metadata": {
+        "description": "The FQDN of the Active Directory Domain to be created"
+      }
+    },
+    "adminUsername": {
+      "type": "string",
+      "defaultValue": "labadmin",
+      "metadata": {
+        "description": "Username for the Administrator account"
+      }
+    },
+    "adminPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Password for the Administrator account"
+      }
+    },
+    "serverVmName": {
+      "type": "string",
+      "defaultValue": "DC01",
+      "metadata": {
+        "description": "Name of the Domain Controller VM"
+      }
+    },
+    "clientVmName": {
+      "type": "string",
+      "defaultValue": "CLIENT01",
+      "metadata": {
+        "description": "Name of the Windows 11 client VM"
+      }
+    },
+    "vmSize": {
+      "type": "string",
+      "defaultValue": "Standard_D2s_v3",
+      "allowedValues": [
+        "Standard_D2s_v3",
+        "Standard_D4s_v3",
+        "Standard_D8s_v3"
+      ],
+      "metadata": {
+        "description": "Size of the Virtual Machines"
+      }
+    }
+  },
+  "variables": {
+    "vnetName": "[concat(parameters('labName'), '-vnet')]",
+    "subnetName": "default",
+    "serverNicName": "[concat(parameters('serverVmName'), '-nic')]",
+    "clientNicName": "[concat(parameters('clientVmName'), '-nic')]",
+    "serverPrivateIP": "10.0.0.4",
+    "clientPrivateIP": "10.0.0.5",
+    "dscModuleUrl": "https://github.com/PowerShell/xActiveDirectory/archive/dev.zip",
+    "dscFunction": "CreateADPDC.ps1\\CreateADPDC",
+    "artifactsLocation": "[deployment().properties.templateLink.uri]",
+    "artifactsLocationSasToken": ""
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2021-02-01",
+      "name": "[variables('vnetName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "10.0.0.0/16"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('subnetName')]",
+            "properties": {
+              "addressPrefix": "10.0.0.0/24"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2021-02-01",
+      "name": "[variables('serverNicName')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+      ],
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Static",
+              "privateIPAddress": "[variables('serverPrivateIP')]",
+              "subnet": {
+                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('subnetName'))]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.DevTestLab/labs/virtualmachines",
+      "apiVersion": "2018-09-15",
+      "name": "[concat(parameters('labName'), '/', parameters('serverVmName'))]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('serverNicName'))]"
+      ],
+      "properties": {
+        "size": "[parameters('vmSize')]",
+        "userName": "[parameters('adminUsername')]",
+        "password": "[parameters('adminPassword')]",
+        "isAuthenticationWithSshKey": false,
+        "galleryImageReference": {
+          "offer": "WindowsServer",
+          "publisher": "MicrosoftWindowsServer",
+          "sku": "2022-datacenter-g2",
+          "osType": "Windows",
+          "version": "latest"
+        },
+        "networkInterface": {
+          "sharedPublicIpAddressConfiguration": {
+            "inboundNatRules": [
+              {
+                "transportProtocol": "tcp",
+                "backendPort": 3389
+              }
+            ]
+          }
+        },
+        "allowClaim": true,
+        "storageType": "Premium",
+        "notes": "Domain Controller Server - Windows Server 2022"
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "apiVersion": "2021-03-01",
+      "name": "[concat(parameters('serverVmName'), '/CreateADForest')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[resourceId('Microsoft.DevTestLab/labs/virtualmachines', parameters('labName'), parameters('serverVmName'))]"
+      ],
+      "properties": {
+        "publisher": "Microsoft.Powershell",
+        "type": "DSC",
+        "typeHandlerVersion": "2.77",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+          "modulesUrl": "[variables('dscModuleUrl')]",
+          "configurationFunction": "[variables('dscFunction')]",
+          "properties": {
+            "DomainName": "[parameters('domainName')]",
+            "AdminCreds": {
+              "UserName": "[parameters('adminUsername')]",
+              "Password": "PrivateSettingsRef:AdminPassword"
+            }
+          }
+        },
+        "protectedSettings": {
+          "AdminPassword": "[parameters('adminPassword')]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2021-02-01",
+      "name": "[concat(variables('vnetName'), '-updated')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Compute/virtualMachines/extensions', parameters('serverVmName'), 'CreateADForest')]"
+      ],
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "10.0.0.0/16"
+          ]
+        },
+        "dhcpOptions": {
+          "dnsServers": [
+            "[variables('serverPrivateIP')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('subnetName')]",
+            "properties": {
+              "addressPrefix": "10.0.0.0/24"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2021-02-01",
+      "name": "[variables('clientNicName')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', concat(variables('vnetName'), '-updated'))]"
+      ],
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Static",
+              "privateIPAddress": "[variables('clientPrivateIP')]",
+              "subnet": {
+                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', concat(variables('vnetName'), '-updated'), variables('subnetName'))]"
+              }
+            }
+          }
+        ],
+        "dnsSettings": {
+          "dnsServers": [
+            "[variables('serverPrivateIP')]"
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DevTestLab/labs/virtualmachines",
+      "apiVersion": "2018-09-15",
+      "name": "[concat(parameters('labName'), '/', parameters('clientVmName'))]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('clientNicName'))]"
+      ],
+      "properties": {
+        "size": "[parameters('vmSize')]",
+        "userName": "[parameters('adminUsername')]",
+        "password": "[parameters('adminPassword')]",
+        "isAuthenticationWithSshKey": false,
+        "galleryImageReference": {
+          "offer": "windows-11",
+          "publisher": "microsoftwindowsdesktop",
+          "sku": "win11-22h2-pro",
+          "osType": "Windows",
+          "version": "latest"
+        },
+        "networkInterface": {
+          "sharedPublicIpAddressConfiguration": {
+            "inboundNatRules": [
+              {
+                "transportProtocol": "tcp",
+                "backendPort": 3389
+              }
+            ]
+          }
+        },
+        "allowClaim": true,
+        "storageType": "Premium",
+        "notes": "Windows 11 Client - Domain Joined"
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "apiVersion": "2021-03-01",
+      "name": "[concat(parameters('clientVmName'), '/JoinDomain')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[resourceId('Microsoft.DevTestLab/labs/virtualmachines', parameters('labName'), parameters('clientVmName'))]"
+      ],
+      "properties": {
+        "publisher": "Microsoft.Compute",
+        "type": "CustomScriptExtension",
+        "typeHandlerVersion": "1.10",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+          "fileUris": [
+            "[uri(variables('artifactsLocation'), concat('scripts/JoinDomain.ps1', variables('artifactsLocationSasToken')))]"
+          ],
+          "commandToExecute": "[concat('powershell -ExecutionPolicy Unrestricted -File JoinDomain.ps1 -DomainName ', parameters('domainName'), ' -AdminUsername ', parameters('adminUsername'), ' -AdminPassword ', parameters('adminPassword'), ' -DCIPAddress ', variables('serverPrivateIP'))]"
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "domainName": {
+      "type": "string",
+      "value": "[parameters('domainName')]"
+    },
+    "serverVmName": {
+      "type": "string",
+      "value": "[parameters('serverVmName')]"
+    },
+    "clientVmName": {
+      "type": "string",
+      "value": "[parameters('clientVmName')]"
+    }
+  }
+}

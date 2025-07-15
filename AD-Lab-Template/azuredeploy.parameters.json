@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "labName": {
+      "value": "MSP-Lab-001"
+    },
+    "domainName": {
+      "value": "testlab.local"
+    },
+    "adminUsername": {
+      "value": "labadmin"
+    },
+    "adminPassword": {
+      "value": "P@ssw0rd123!"
+    },
+    "serverVmName": {
+      "value": "DC01"
+    },
+    "clientVmName": {
+      "value": "CLIENT01"
+    },
+    "vmSize": {
+      "value": "Standard_D2s_v3"
+    }
+  }
+}

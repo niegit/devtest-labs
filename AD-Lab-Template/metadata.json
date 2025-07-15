@@ -1,0 +1,16 @@
+{
+  "itemDisplayName": "Active Directory Lab Environment",
+  "description": "Complete AD lab environment with Domain Controller and Windows 11 client",
+  "summary": "Deploys a Windows Server 2022 DC with new AD forest and a Windows 11 client that automatically joins the domain",
+  "githubUsername": "your-msp-name",
+  "dateUpdated": "2025-01-15",
+  "tags": {
+    "subscriptiontype": "DevTest",
+    "cost": "$$",
+    "alwayson": "false",
+    "level": "300",
+    "os": "Windows",
+    "prereq": "none",
+    "learning": "https://docs.microsoft.com/azure/devtest-labs/"
+  }
+}
