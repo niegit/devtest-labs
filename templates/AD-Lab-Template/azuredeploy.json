@@ -56,13 +56,6 @@
       "metadata": {
         "description": "Azure region where all resources will be deployed. North Central US is selected for optimal performance and compliance."
       }
-    },
-    "existingNsgName": {
-      "type": "string",
-      "defaultValue": "lab-nsg",
-      "metadata": {
-        "description": "Name of the existing Network Security Group to use for the VNet subnet. This NSG should already exist in the same resource group or subscription."
-      }
     }
   },
   "variables": {
@@ -123,10 +116,7 @@
           {
             "name": "[variables('subnetName')]",
             "properties": {
-              "addressPrefix": "10.0.0.0/24",
-              "networkSecurityGroup": {
-                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('existingNsgName'))]"
-              }
+              "addressPrefix": "10.0.0.0/24"
             }
           }
         ]
@@ -249,10 +239,7 @@
           {
             "name": "[variables('subnetName')]",
             "properties": {
-              "addressPrefix": "10.0.0.0/24",
-              "networkSecurityGroup": {
-                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('existingNsgName'))]"
-              }
+              "addressPrefix": "10.0.0.0/24"
             }
           }
         ]
@@ -328,7 +315,7 @@
               "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('clientNicName'))]"
             }
           ]
-        }
+        ]
       }
     },
     {
@@ -385,7 +372,7 @@
     },
     "rdpInstructions": {
       "type": "string",
-      "value": "RDP is enabled by default on Windows VMs. Connect using the public IP addresses or FQDNs provided above. VMs use the specified NSG for security."
+      "value": "RDP is enabled by default on Windows VMs. Connect using the public IP addresses or FQDNs provided above."
     }
   }
 }
