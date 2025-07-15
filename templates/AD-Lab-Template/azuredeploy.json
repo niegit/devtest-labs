@@ -315,7 +315,7 @@
               "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('clientNicName'))]"
             }
           ]
-        ]
+        }
       }
     },
     {
