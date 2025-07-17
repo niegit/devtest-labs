@@ -1,0 +1,16 @@
+{
+  "itemDisplayName": "MSP Security & Tools VM",
+  "description": "Complete MSP technician workstation with security analysis and system administration tools",
+  "summary": "Deploys Windows 11 VM pre-configured with malware analysis tools, PowerShell modules, network utilities, and remote access tools for MSP operations",
+  "githubUsername": "Leap IT Labs",
+  "dateUpdated": "2025-01-16",
+  "tags": {
+    "subscriptiontype": "DevTest",
+    "cost": "$$",
+    "alwayson": "false",
+    "level": "200",
+    "os": "Windows",
+    "prereq": "none",
+    "learning": "https://docs.microsoft.com/azure/devtest-labs/"
+  }
+}
