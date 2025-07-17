@@ -40,6 +40,32 @@ if (-not $isDC) {
     exit 0
 }
 
+# Check and start ADWS service
+Write-Output "Checking Active Directory Web Services..."
+$adwsService = Get-Service -Name "ADWS" -ErrorAction SilentlyContinue
+if ($adwsService) {
+    if ($adwsService.StartType -eq "Disabled") {
+        Write-Output "ADWS is disabled. Enabling and starting it..."
+        Set-Service ADWS -StartupType Automatic
+        Start-Service ADWS
+        Write-Output "ADWS enabled and started"
+    }
+    elseif ($adwsService.Status -ne "Running") {
+        Write-Output "Starting ADWS service..."
+        Start-Service ADWS
+        Write-Output "ADWS started"
+    }
+    else {
+        Write-Output "ADWS is already running"
+    }
+    
+    # Wait a moment for ADWS to fully initialize
+    Start-Sleep -Seconds 5
+}
+else {
+    Write-Output "Warning: ADWS service not found"
+}
+
 # Import Active Directory module
 Write-Output "Importing Active Directory module..."
 Import-Module ActiveDirectory -Force -ErrorAction Stop
