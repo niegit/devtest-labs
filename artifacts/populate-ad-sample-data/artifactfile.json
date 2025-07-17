@@ -39,6 +39,6 @@
     }
   },
   "runCommand": {
-    "commandToExecute": "[concat('powershell.exe -ExecutionPolicy Unrestricted -File ./PopulateADSampleData.ps1', ' -UserCount ', parameters('userCount'), ' -DepartmentCount ', parameters('departmentCount'), ' -CreateServiceAccounts:', parameters('createServiceAccounts'), ' -EnablePasswordPolicy:', parameters('enablePasswordPolicy'), ' -CreateSecurityGroups:', parameters('createSecurityGroups'))]"
+    "commandToExecute": "[concat('powershell.exe -ExecutionPolicy Unrestricted -File ./PopulateADSampleData.ps1', ' -UserCount ', parameters('userCount'), ' -DepartmentCount ', parameters('departmentCount'), ' -CreateServiceAccounts ', parameters('createServiceAccounts'), ' -EnablePasswordPolicy ', parameters('enablePasswordPolicy'), ' -CreateSecurityGroups ', parameters('createSecurityGroups'))]"
   }
 }

@@ -205,28 +205,6 @@
           "commandToExecute": "[concat('powershell -ExecutionPolicy Unrestricted -File Install-MSPTools.ps1 -AdminUsername ', parameters('adminUsername'))]"
         }
       }
-    },
-    {
-      "condition": "[parameters('enableAutoShutdown')]",
-      "type": "Microsoft.DevTestLab/schedules",
-      "apiVersion": "2018-09-15",
-      "name": "[concat('shutdown-computevm-', parameters('vmName'))]",
-      "location": "[parameters('location')]",
-      "dependsOn": [
-        "[resourceId('Microsoft.Compute/virtualMachines', parameters('vmName'))]"
-      ],
-      "properties": {
-        "status": "Enabled",
-        "taskType": "ComputeVmShutdownTask",
-        "dailyRecurrence": {
-          "time": "[parameters('autoShutdownTime')]"
-        },
-        "timeZoneId": "[parameters('timeZone')]",
-        "targetResourceId": "[resourceId('Microsoft.Compute/virtualMachines', parameters('vmName'))]",
-        "notificationSettings": {
-          "status": "Disabled"
-        }
-      }
     }
   ],
   "outputs": {
@@ -248,7 +226,7 @@
     },
     "autoShutdownTime": {
       "type": "string",
-      "value": "[if(parameters('enableAutoShutdown'), parameters('autoShutdownTime'), 'Disabled')]"
+      "value": "Managed by DevTest Lab"
     },
     "installedTools": {
       "type": "string",

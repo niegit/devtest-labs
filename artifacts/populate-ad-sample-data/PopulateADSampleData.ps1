@@ -1,10 +1,15 @@
 param(
     [int]$UserCount = 25,
     [int]$DepartmentCount = 5,
-    [bool]$CreateServiceAccounts = $true,
-    [bool]$EnablePasswordPolicy = $true,
-    [bool]$CreateSecurityGroups = $true
+    [string]$CreateServiceAccounts = "true",
+    [string]$EnablePasswordPolicy = "true",
+    [string]$CreateSecurityGroups = "true"
 )
+
+# Convert string parameters to boolean
+$CreateServiceAccountsBool = $CreateServiceAccounts -eq "true" -or $CreateServiceAccounts -eq "True" -or $CreateServiceAccounts -eq "1"
+$EnablePasswordPolicyBool = $EnablePasswordPolicy -eq "true" -or $EnablePasswordPolicy -eq "True" -or $EnablePasswordPolicy -eq "1"
+$CreateSecurityGroupsBool = $CreateSecurityGroups -eq "true" -or $CreateSecurityGroups -eq "True" -or $CreateSecurityGroups -eq "1"
 
 $LogFile = "C:\Windows\Temp\PopulateADSampleData.log"
 Start-Transcript -Path $LogFile -Append
@@ -72,7 +77,7 @@ foreach ($dept in $selectedDepartments) {
 }
 
 # Create Security Groups
-if ($CreateSecurityGroups) {
+if ($CreateSecurityGroupsBool) {
     Write-Output "Creating Security Groups..."
     
     foreach ($dept in $createdDepts) {
@@ -129,7 +134,7 @@ foreach ($dept in $createdDepts) {
             New-ADUser @userParams
             Write-Output "Created user: $username ($displayName) - $dept"
             
-            if ($CreateSecurityGroups) {
+            if ($CreateSecurityGroupsBool) {
                 Add-ADGroupMember -Identity "$dept-Users" -Members $username -ErrorAction SilentlyContinue
             }
             
@@ -141,7 +146,7 @@ foreach ($dept in $createdDepts) {
 }
 
 # Create Service Accounts
-if ($CreateServiceAccounts) {
+if ($CreateServiceAccountsBool) {
     Write-Output "Creating Service Accounts..."
     
     $serviceOU = "OU=Service Accounts,$domainDN"
