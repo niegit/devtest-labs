@@ -1,43 +1,300 @@
 {
-  "$schema": "https://raw.githubusercontent.com/Azure/azure-devtestlab/master/schemas/2016-11-28/dtlArtifacts.json",
-  "title": "MSP Security & Tools Suite",
-  "description": "Installs a comprehensive suite of security analysis and system administration tools for MSP technicians. Includes malware analysis tools, PowerShell modules, network utilities, remote access tools, and log analysis capabilities.",
-  "iconUri": "https://raw.githubusercontent.com/Azure/azure-devtestlab/master/Artifacts/windows-security-tools/icon.png",
-  "targetOsType": "Windows",
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
   "parameters": {
-    "installLocation": {
+    "vmName": {
       "type": "string",
-      "displayName": "Installation Directory",
-      "description": "Root directory where MSP tools will be installed",
-      "defaultValue": "C:\\MSP-Tools",
-      "allowedValues": []
+      "defaultValue": "MSP-Tools-VM",
+      "metadata": {
+        "description": "Name for the MSP Tools virtual machine. This VM will be pre-configured with security analysis and system administration tools."
+      }
     },
-    "createDesktopShortcuts": {
-      "type": "bool",
-      "displayName": "Create Desktop Shortcuts",
-      "description": "Create desktop shortcuts for quick access to tools and directories",
-      "defaultValue": true
+    "adminUsername": {
+      "type": "string",
+      "defaultValue": "msptech",
+      "metadata": {
+        "description": "Administrator username for the VM. This account will have local admin privileges and access to all installed tools."
+      }
     },
-    "installPowerShellModules": {
-      "type": "bool",
-      "displayName": "Install PowerShell Modules",
-      "description": "Install Microsoft 365, Azure AD, and security-related PowerShell modules",
-      "defaultValue": true
+    "adminPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Password for the administrator account. Must meet Azure complexity requirements: 12+ characters with uppercase, lowercase, numbers, and special characters."
+      }
     },
-    "configureSecurityExclusions": {
-      "type": "bool",
-      "displayName": "Configure Security Exclusions",
-      "description": "Add Windows Defender exclusions for tools directory to prevent interference with malware analysis",
-      "defaultValue": true
+    "vmSize": {
+      "type": "string",
+      "defaultValue": "Standard_B2ms",
+      "allowedValues": [
+        "Standard_B2ms",
+        "Standard_B2als_v2"
+      ],
+      "metadata": {
+        "description": "Size of the virtual machine. B2ms (2 vCPU, 8GB RAM) is recommended for security analysis tools. B2als (2 vCPU, 4GB RAM) is more cost-effective for lighter workloads."
+      }
     },
-    "downloadSpecialtyTools": {
+    "autoShutdownTime": {
+      "type": "string",
+      "defaultValue": "1800",
+      "metadata": {
+        "description": "Time to automatically shutdown the VM (24-hour format, e.g., 1800 for 6:00 PM). Helps control costs for disposable analysis VMs."
+      }
+    },
+    "enableAutoShutdown": {
       "type": "bool",
-      "displayName": "Download Specialty Tools",
-      "description": "Attempt to download portable versions of IAS Log Viewer and VirusTotal CLI",
-      "defaultValue": true
+      "defaultValue": true,
+      "metadata": {
+        "description": "Enable automatic shutdown to control costs. Recommended for analysis VMs that are used temporarily."
+      }
+    },
+    "timeZone": {
+      "type": "string",
+      "defaultValue": "Central Standard Time",
+      "metadata": {
+        "description": "Time zone for the VM and auto-shutdown schedule."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "North Central US",
+      "allowedValues": [
+        "North Central US"
+      ],
+      "metadata": {
+        "description": "Azure region where the VM will be deployed. North Central US is selected for optimal performance."
+      }
     }
   },
-  "runCommand": {
-    "commandToExecute": "[concat('powershell.exe -ExecutionPolicy Unrestricted -File ./Install-MSPTools.ps1', ' -InstallLocation \"', parameters('installLocation'), '\"', ' -CreateDesktopShortcuts $', parameters('createDesktopShortcuts'), ' -InstallPowerShellModules $', parameters('installPowerShellModules'), ' -ConfigureSecurityExclusions $', parameters('configureSecurityExclusions'), ' -DownloadSpecialtyTools $', parameters('downloadSpecialtyTools'))]"
+  "variables": {
+    "vnetName": "[concat('MSP-Tools-VNet-', uniqueString(resourceGroup().id))]",
+    "subnetName": "default",
+    "nicName": "[concat(parameters('vmName'), '-nic')]",
+    "publicIPName": "[concat(parameters('vmName'), '-pip')]",
+    "nsgName": "[concat(parameters('vmName'), '-nsg')]",
+    "privateIP": "10.0.0.4",
+    "artifactsLocation": "https://raw.githubusercontent.com/dlepi24/devtest-labs/main/templates/",
+    "artifactsLocationSasToken": ""
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2021-02-01",
+      "name": "[variables('nsgName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "RDP",
+            "properties": {
+              "priority": 1000,
+              "protocol": "TCP",
+              "access": "Allow",
+              "direction": "Inbound",
+              "sourceAddressPrefix": "*",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "3389"
+            }
+          },
+          {
+            "name": "AllowOutbound",
+            "properties": {
+              "priority": 1100,
+              "protocol": "*",
+              "access": "Allow",
+              "direction": "Outbound",
+              "sourceAddressPrefix": "*",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "*"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/publicIPAddresses",
+      "apiVersion": "2021-02-01",
+      "name": "[variables('publicIPName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Static",
+        "dnsSettings": {
+          "domainNameLabel": "[toLower(concat(parameters('vmName'), '-', uniqueString(resourceGroup().id)))]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2021-02-01",
+      "name": "[variables('vnetName')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+      ],
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "10.0.0.0/16"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('subnetName')]",
+            "properties": {
+              "addressPrefix": "10.0.0.0/24",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2021-02-01",
+      "name": "[variables('nicName')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]",
+        "[resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPName'))]"
+      ],
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Static",
+              "privateIPAddress": "[variables('privateIP')]",
+              "subnet": {
+                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('subnetName'))]"
+              },
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPName'))]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2021-03-01",
+      "name": "[parameters('vmName')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
+      ],
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[parameters('vmName')]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[parameters('adminPassword')]",
+          "windowsConfiguration": {
+            "enableAutomaticUpdates": true,
+            "provisionVMAgent": true,
+            "timeZone": "[parameters('timeZone')]"
+          }
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "MicrosoftWindowsDesktop",
+            "offer": "Windows-11",
+            "sku": "win11-24h2-pro",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "[concat(parameters('vmName'), '-osdisk')]",
+            "createOption": "FromImage",
+            "managedDisk": {
+              "storageAccountType": "Premium_LRS"
+            }
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "apiVersion": "2021-03-01",
+      "name": "[concat(parameters('vmName'), '/InstallMSPTools')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Compute/virtualMachines', parameters('vmName'))]"
+      ],
+      "properties": {
+        "publisher": "Microsoft.Compute",
+        "type": "CustomScriptExtension",
+        "typeHandlerVersion": "1.10",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+          "fileUris": [
+            "[uri(variables('artifactsLocation'), concat('scripts/Install-MSPTools.ps1', variables('artifactsLocationSasToken')))]"
+          ],
+          "commandToExecute": "[concat('powershell -ExecutionPolicy Unrestricted -File Install-MSPTools.ps1 -AdminUsername ', parameters('adminUsername'))]"
+        }
+      }
+    },
+    {
+      "condition": "[parameters('enableAutoShutdown')]",
+      "type": "Microsoft.DevTestLab/schedules",
+      "apiVersion": "2018-09-15",
+      "name": "[concat('shutdown-computevm-', parameters('vmName'))]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Compute/virtualMachines', parameters('vmName'))]"
+      ],
+      "properties": {
+        "status": "Enabled",
+        "taskType": "ComputeVmShutdownTask",
+        "dailyRecurrence": {
+          "time": "[parameters('autoShutdownTime')]"
+        },
+        "timeZoneId": "[parameters('timeZone')]",
+        "targetResourceId": "[resourceId('Microsoft.Compute/virtualMachines', parameters('vmName'))]",
+        "notificationSettings": {
+          "status": "Disabled"
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "vmName": {
+      "type": "string",
+      "value": "[parameters('vmName')]"
+    },
+    "publicIP": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPName'))).ipAddress]"
+    },
+    "fqdn": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPName'))).dnsSettings.fqdn]"
+    },
+    "rdpCommand": {
+      "type": "string",
+      "value": "[concat('mstsc /v:', reference(resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPName'))).dnsSettings.fqdn)]"
+    },
+    "autoShutdownTime": {
+      "type": "string",
+      "value": "[if(parameters('enableAutoShutdown'), parameters('autoShutdownTime'), 'Disabled')]"
+    },
+    "installedTools": {
+      "type": "string",
+      "value": "Hybrid Analysis Setup, IAS Log Viewer, PowerShell ISE + Modules, Wireshark, Advanced IP Scanner, mRemoteNG, PuTTY/WinSCP, Sysinternals Suite, Event Log Explorer, VirusTotal CLI"
+    }
   }
 }
