@@ -77,42 +77,6 @@
   },
   "resources": [
     {
-      "type": "Microsoft.Network/networkSecurityGroups",
-      "apiVersion": "2021-02-01",
-      "name": "[variables('nsgName')]",
-      "location": "[parameters('location')]",
-      "properties": {
-        "securityRules": [
-          {
-            "name": "RDP",
-            "properties": {
-              "priority": 1000,
-              "protocol": "TCP",
-              "access": "Allow",
-              "direction": "Inbound",
-              "sourceAddressPrefix": "*",
-              "sourcePortRange": "*",
-              "destinationAddressPrefix": "*",
-              "destinationPortRange": "3389"
-            }
-          },
-          {
-            "name": "AllowOutbound",
-            "properties": {
-              "priority": 1100,
-              "protocol": "*",
-              "access": "Allow",
-              "direction": "Outbound",
-              "sourceAddressPrefix": "*",
-              "sourcePortRange": "*",
-              "destinationAddressPrefix": "*",
-              "destinationPortRange": "*"
-            }
-          }
-        ]
-      }
-    },
-    {
       "type": "Microsoft.Network/publicIPAddresses",
       "apiVersion": "2021-02-01",
       "name": "[variables('publicIPName')]",
@@ -132,9 +96,6 @@
       "apiVersion": "2021-02-01",
       "name": "[variables('vnetName')]",
       "location": "[parameters('location')]",
-      "dependsOn": [
-        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
-      ],
       "properties": {
         "addressSpace": {
           "addressPrefixes": [
@@ -145,10 +106,7 @@
           {
             "name": "[variables('subnetName')]",
             "properties": {
-              "addressPrefix": "10.0.0.0/24",
-              "networkSecurityGroup": {
-                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
-              }
+              "addressPrefix": "10.0.0.0/24"
             }
           }
         ]
