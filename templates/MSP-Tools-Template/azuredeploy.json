@@ -199,10 +199,7 @@
         "typeHandlerVersion": "1.10",
         "autoUpgradeMinorVersion": true,
         "settings": {
-          "fileUris": [
-            "[uri(variables('artifactsLocation'), concat('scripts/Install-MSPTools.ps1', variables('artifactsLocationSasToken')))]"
-          ],
-          "commandToExecute": "[concat('powershell -ExecutionPolicy Unrestricted -File Install-MSPTools.ps1 -AdminUsername ', parameters('adminUsername'))]"
+          "commandToExecute": "powershell -ExecutionPolicy Unrestricted -Command \"Set-ExecutionPolicy RemoteSigned -Force; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')); choco install wireshark putty winscp mremoteng advanced-ip-scanner sysinternals powershell-core git 7zip notepadplusplus -y; Install-Module ExchangeOnlineManagement,Microsoft.Graph,AzureAD,MSOnline -Force -AllowClobber; New-Item C:\\MSP-Tools -ItemType Directory -Force; echo 'MSP Tools VM Setup Complete - Check desktop for shortcuts' > C:\\MSP-Tools\\readme.txt\""
         }
       }
     }
