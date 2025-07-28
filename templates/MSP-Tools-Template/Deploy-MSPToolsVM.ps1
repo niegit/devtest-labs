@@ -15,7 +15,7 @@ param(
     [string]$VmSize = "Standard_B2ms",
     [string]$AutoShutdownTime = "1800",
     [bool]$EnableAutoShutdown = $true,
-    [string]$TemplateUri = "https://raw.githubusercontent.com/dlepi24/devtest-labs/main/templates/MSP-Tools-Template/azuredeploy.json",
+    [string]$TemplateUri = "https://raw.githubusercontent.com/niegit/devtest-labs/main/templates/MSP-Tools-Template/azuredeploy.json",
     [string]$Location = "North Central US"
 )
 
