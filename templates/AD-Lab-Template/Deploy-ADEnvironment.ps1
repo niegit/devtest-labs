@@ -18,7 +18,7 @@ param(
     [string]$ServerVmName = "DC01",
     [string]$ClientVmName = "CLIENT01",
     [string]$VmSize = "Standard_B2ms",
-    [string]$TemplateUri = "https://raw.githubusercontent.com/dlepi24/devtest-labs/main/templates/AD-Lab-Template/azuredeploy.json",
+    [string]$TemplateUri = "https://raw.githubusercontent.com/niegit/devtest-labs/main/templates/AD-Lab-Template/azuredeploy.json",
     [string]$Location = "North Central US"
 )
 
