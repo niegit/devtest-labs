@@ -67,7 +67,7 @@
     "clientPublicIPName": "[concat(parameters('clientVmName'), '-pip')]",
     "serverPrivateIP": "10.0.0.4",
     "clientPrivateIP": "10.0.0.5",
-    "artifactsLocation": "https://raw.githubusercontent.com/dlepi24/devtest-labs/main/templates/",
+    "artifactsLocation": "https://raw.githubusercontent.com/niegit/devtest-labs/main/templates/",
     "artifactsLocationSasToken": ""
   },
   "resources": [
@@ -182,7 +182,7 @@
             "name": "[concat(parameters('serverVmName'), '-osdisk')]",
             "createOption": "FromImage",
             "managedDisk": {
-              "storageAccountType": "Premium_LRS"
+              "storageAccountType": "Standard_LRS"
             }
           }
         },
@@ -321,7 +321,7 @@
             "name": "[concat(parameters('clientVmName'), '-osdisk')]",
             "createOption": "FromImage",
             "managedDisk": {
-              "storageAccountType": "Premium_LRS"
+              "storageAccountType": "Standard_LRS"
             }
           }
         },
